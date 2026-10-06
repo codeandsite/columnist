@@ -132,7 +132,18 @@ export default function Reader({
         const ePub = mod?.default ?? mod;
         if (cancelledRef.current) return;
 
-        book = ePub(url);
+        // Download the EPUB bytes ourselves and hand binary data to epub.js.
+        // (Passing the signed URL directly breaks epub.js's type detection:
+        // the JWT in the query string contains dots, so it misdetects the
+        // extension and treats the book as an unarchived directory.)
+        const epubRes = await withTimeout(fetch(url), 30000, "epub download");
+        if (!epubRes.ok) {
+          throw new Error(`epub download failed: ${epubRes.status}`);
+        }
+        const epubData = await epubRes.arrayBuffer();
+        if (cancelledRef.current) return;
+
+        book = ePub(epubData);
         bookRef.current = book;
         rendition = book.renderTo(viewerRef.current, {
           width: "100%",
@@ -183,8 +194,10 @@ export default function Reader({
         } catch {
           /* no TOC — reader still works */
         }
-      } catch {
+      } catch (err) {
         if (!cancelledRef.current) {
+          // Log the real cause for debugging; the UI keeps a friendly message.
+          console.error("[columnist reader] failed to open book:", err);
           setErrorMessage("Could not open this book for reading.");
           setStatus("error");
         }
