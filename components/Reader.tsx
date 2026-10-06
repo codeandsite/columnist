@@ -162,6 +162,9 @@ export default function Reader({
           height: "100%",
           flow: "paginated",
           allowScriptedContent: false,
+          // "write" (document.write into the iframe) never fires the iframe
+          // load event in some browsers; srcdoc is more reliable.
+          method: "srcdoc",
         });
         renditionRef.current = rendition;
         step("renderTo:ok");
