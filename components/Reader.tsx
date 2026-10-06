@@ -219,25 +219,27 @@ export default function Reader({
         setTimeout(() => {
           try {
             const mgr: any = (rendition as any).manager;
-            const views: any[] = mgr?.views?.toArray?.() ?? [];
-            step(`probe:views=${views.length}`);
-            for (const v of views) {
-              const fr: any = v?.iframe;
-              let docInfo = "no-iframe";
-              if (fr) {
-                let hasDoc = false;
-                let bodyLen = -1;
-                try {
-                  hasDoc = !!fr.contentDocument;
-                  bodyLen = fr.contentDocument?.body?.innerHTML?.length ?? -1;
-                } catch (e: any) {
-                  docInfo = `iframe-doc-blocked:${e?.name || e}`;
-                }
-                if (docInfo === "no-iframe") {
-                  docInfo = `iframe:srcdocLen=${String(fr.srcdoc ?? "").length},hasDoc=${hasDoc},bodyLen=${bodyLen},displayed=${v.displayed},rendered=${v.rendered}`;
-                }
+            const q: any = (rendition as any).q;
+            const viewCount = mgr?.views?.length ?? -1;
+            step(`probe:hasManager=${!!mgr},views=${viewCount},queueLen=${q?._q?.length ?? -1},queueRunning=${!!q?.running}`);
+            let rafFired = false;
+            requestAnimationFrame(() => {
+              rafFired = true;
+            });
+            setTimeout(() => step(`probe:rafFired=${rafFired}`), 2500);
+            const views = mgr?.views;
+            const first = views?._views?.[0];
+            const fr: any = first?.iframe;
+            if (fr) {
+              let info: string;
+              try {
+                info = `iframe:srcdocLen=${String(fr.srcdoc ?? "").length},hasDoc=${!!fr.contentDocument},bodyLen=${fr.contentDocument?.body?.innerHTML?.length ?? -1},displayed=${first.displayed}`;
+              } catch (e: any) {
+                info = `iframe-doc-blocked:${e?.name || e}`;
               }
-              step(`probe:${docInfo}`);
+              step(`probe:${info}`);
+            } else {
+              step(`probe:no-iframe`);
             }
           } catch (e: any) {
             step(`probe:FAIL:${e?.message || e}`);
