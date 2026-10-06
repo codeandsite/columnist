@@ -108,26 +108,7 @@ export default function Reader({
     }
 
     async function init() {
-      // TEMP-DEBUG: step log to isolate the hang. Remove after verification.
-      const steps: string[] = [];
-      const step = (s: string) => {
-        steps.push(s);
-        try {
-          document.title = `[dbg] ${s}`;
-        } catch { /* ignore */ }
-      };
-      // TEMP-DEBUG: capture uncaught errors (the rendition queue runs inside
-      // requestAnimationFrame; a sync throw there never reaches our catch).
-      const onWinErr = (e: ErrorEvent) => {
-        const stack = (e.error as any)?.stack ? String((e.error as any).stack).slice(0, 800) : "";
-        step(`window.onerror:${e.message} @${e.lineno}:${e.colno} stack:${stack}`);
-      };
-      const onUnhandled = (e: PromiseRejectionEvent) =>
-        step(`unhandledrejection:${(e.reason as any)?.message || String(e.reason)}`);
-      window.addEventListener("error", onWinErr);
-      window.addEventListener("unhandledrejection", onUnhandled);
       try {
-        step("fetch-epub-url:start");
         const res = await fetch(`/api/books/${bookId}/epub-url`);
         const body = await res.json().catch(() => ({}));
         if (cancelledRef.current) return;
@@ -146,7 +127,6 @@ export default function Reader({
           setStatus("error");
           return;
         }
-        step("fetch-epub-url:ok");
 
         const mod: any = await import("epubjs");
         const ePub = mod?.default ?? mod;
@@ -156,13 +136,11 @@ export default function Reader({
         // (Passing the signed URL directly breaks epub.js's type detection:
         // the JWT in the query string contains dots, so it misdetects the
         // extension and treats the book as an unarchived directory.)
-        step("fetch-epub:start");
         const epubRes = await withTimeout(fetch(url), 30000, "epub download");
         if (!epubRes.ok) {
           throw new Error(`epub download failed: ${epubRes.status}`);
         }
         const epubData = await epubRes.arrayBuffer();
-        step(`fetch-epub:ok:${epubData.byteLength}b`);
         if (cancelledRef.current) return;
 
         book = ePub(epubData);
@@ -172,12 +150,9 @@ export default function Reader({
           height: "100%",
           flow: "paginated",
           allowScriptedContent: false,
-          // "write" (document.write into the iframe) never fires the iframe
-          // load event in some browsers; srcdoc is more reliable.
           method: "srcdoc",
         });
         renditionRef.current = rendition;
-        step("renderTo:ok");
 
         for (const name of THEMES) {
           rendition.themes.register(name, THEME_STYLES[name]);
@@ -186,7 +161,6 @@ export default function Reader({
         rendition.themes.fontSize(`${FONT_DEFAULT}px`);
 
         rendition.on("relocated", () => {
-          step("event:relocated");
           const { cfi, pct } = percentFromLocation(rendition, book);
           if (!cancelledRef.current) {
             if (pct > 0) setProgress(pct);
@@ -194,73 +168,28 @@ export default function Reader({
           }
           if (!cancelledRef.current) setStatus("ready");
         });
-        rendition.on("displayed", () => step("event:displayed"));
-        // NOTE: epub.js emits "displayerror" (all lowercase).
-        rendition.on("displayerror", (e: any) =>
-          step(`event:displayerror:${e?.message || e}`)
-        );
-        rendition.on("rendered", () => step("event:rendered"));
 
         // Parse the package — bail out loudly if it stalls.
-        step("book.ready:wait");
         await withTimeout(book.ready, 20000, "book.ready");
-        step("book.ready:ok");
         if (cancelledRef.current) return;
 
-        // TEMP-DEBUG: isolate section parsing from iframe display.
-        try {
-          const sec0: any = book.spine.get(0);
-          step(`spine0:href=${sec0?.href}`);
-          const out: any = await withTimeout(
-            sec0.render(book.load.bind(book)),
-            15000,
-            "section.render"
-          );
-          step(`section.render:ok:${String(out?.length ?? "?")}`);
-        } catch (e: any) {
-          step(`section.render:FAIL:${e?.message || e}`);
+        // Validate the saved reading position before handing it to the
+        // renderer. A malformed CFI makes epub.js throw synchronously inside
+        // its render queue, which kills the queue and hangs the reader
+        // forever — so fall back to the start of the book instead.
+        let displayTarget: string | undefined;
+        const rawCfi = savedCfi && savedCfi.length > 0 ? savedCfi : undefined;
+        if (rawCfi) {
+          try {
+            displayTarget = book.spine.get(rawCfi) ? rawCfi : undefined;
+          } catch {
+            displayTarget = undefined;
+          }
         }
-        if (cancelledRef.current) return;
 
         // Render the first page BEFORE generating locations so the reader
         // can never get stuck on the loading screen.
-        step("rendition.display:start");
-        // TEMP-DEBUG: probe iframe/view state a few seconds into display.
-        setTimeout(() => {
-          try {
-            const mgr: any = (rendition as any).manager;
-            const q: any = (rendition as any).q;
-            const viewCount = mgr?.views?.length ?? -1;
-            step(`probe:hasManager=${!!mgr},views=${viewCount},queueLen=${q?._q?.length ?? -1},queueRunning=${!!q?.running}`);
-            let rafFired = false;
-            requestAnimationFrame(() => {
-              rafFired = true;
-            });
-            setTimeout(() => step(`probe:rafFired=${rafFired}`), 2500);
-            const views = mgr?.views;
-            const first = views?._views?.[0];
-            const fr: any = first?.iframe;
-            if (fr) {
-              let info: string;
-              try {
-                info = `iframe:srcdocLen=${String(fr.srcdoc ?? "").length},hasDoc=${!!fr.contentDocument},bodyLen=${fr.contentDocument?.body?.innerHTML?.length ?? -1},displayed=${first.displayed}`;
-              } catch (e: any) {
-                info = `iframe-doc-blocked:${e?.name || e}`;
-              }
-              step(`probe:${info}`);
-            } else {
-              step(`probe:no-iframe`);
-            }
-          } catch (e: any) {
-            step(`probe:FAIL:${e?.message || e}`);
-          }
-        }, 8000);
-        await withTimeout(
-          rendition.display(savedCfi && savedCfi.length > 0 ? savedCfi : undefined),
-          20000,
-          "rendition.display"
-        );
-        step("rendition.display:ok");
+        await withTimeout(rendition.display(displayTarget), 20000, "rendition.display");
         if (!cancelledRef.current) setStatus("ready");
 
         // Enhancements below must never block reading.
@@ -278,15 +207,8 @@ export default function Reader({
         }
       } catch (err) {
         if (!cancelledRef.current) {
-          // Log the real cause for debugging; the UI keeps a friendly message.
           console.error("[columnist reader] failed to open book:", err);
-          // TEMP-DEBUG: surface the step log in the UI until the reader is
-          // verified working in a real browser. Remove afterwards.
-          const detail =
-            err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-          setErrorMessage(
-            `Could not open this book for reading. [debug: ${detail} || steps: ${steps.join(" > ")}]`
-          );
+          setErrorMessage("Could not open this book for reading.");
           setStatus("error");
         }
       }
