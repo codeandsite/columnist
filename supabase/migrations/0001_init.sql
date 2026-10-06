@@ -94,9 +94,10 @@ create table if not exists public.purchase_requests (
   rejected_at  timestamptz,
   approved_by  uuid references public.profiles(id) on delete set null,
   created_at   timestamptz not null default now(),
-  updated_at   timestamptz not null default now(),
-  -- no duplicate *pending* requests for the same user+book
-  unique (user_id, book_id, status)
+  updated_at   timestamptz not null default now()
+  -- NOTE: no table-level unique constraint here on purpose. Duplicate
+  -- prevention for pending requests is handled by the partial unique index
+  -- below; approved/rejected requests may repeat after re-requests.
 );
 -- Partial unique: only one pending request per user+book. (approved/rejected can repeat
 -- after re-request because the unique tuple includes status.)
