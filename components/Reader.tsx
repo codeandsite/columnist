@@ -177,7 +177,7 @@ export default function Reader({
           /* spine fallback keeps progress working */
         }
         try {
-          const nav = await withTimeout(book.loaded.navigation, 15000, "navigation");
+          const nav = await withTimeout<any>(book.loaded.navigation, 15000, "navigation");
           const items = (nav?.toc ?? []) as TocItem[];
           if (!cancelledRef.current) setToc(items.filter((t) => t?.href && t?.label));
         } catch {
