@@ -118,8 +118,10 @@ export default function Reader({
       };
       // TEMP-DEBUG: capture uncaught errors (the rendition queue runs inside
       // requestAnimationFrame; a sync throw there never reaches our catch).
-      const onWinErr = (e: ErrorEvent) =>
-        step(`window.onerror:${e.message} @${e.lineno}:${e.colno}`);
+      const onWinErr = (e: ErrorEvent) => {
+        const stack = (e.error as any)?.stack ? String((e.error as any).stack).slice(0, 800) : "";
+        step(`window.onerror:${e.message} @${e.lineno}:${e.colno} stack:${stack}`);
+      };
       const onUnhandled = (e: PromiseRejectionEvent) =>
         step(`unhandledrejection:${(e.reason as any)?.message || String(e.reason)}`);
       window.addEventListener("error", onWinErr);
