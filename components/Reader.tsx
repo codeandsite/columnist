@@ -108,6 +108,19 @@ export default function Reader({
     }
 
     async function init() {
+      let openedState: string = "opened:unknown";
+      // TEMP-DEBUG: capture swallowed console.error output (epub.js logs
+      // internal failures there) so the UI can show the real cause.
+      const capturedErrors: string[] = [];
+      const origConsoleError = console.error.bind(console);
+      console.error = (...args: any[]) => {
+        try {
+          capturedErrors.push(
+            args.map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : String(a))).join(" ")
+          );
+        } catch { /* ignore */ }
+        origConsoleError(...args);
+      };
       try {
         const res = await fetch(`/api/books/${bookId}/epub-url`);
         const body = await res.json().catch(() => ({}));
@@ -172,6 +185,16 @@ export default function Reader({
         await withTimeout(book.ready, 20000, "book.ready");
         if (cancelledRef.current) return;
 
+        // TEMP-DEBUG: check whether epub.js's internal `opened` promise
+        // resolves (the rendition queue waits on it before display).
+        openedState = String(
+          await Promise.race([
+            (book as any).opened.then(() => "opened:resolved"),
+            new Promise((r) => setTimeout(() => r("opened:HANG"), 12000)),
+          ])
+        );
+        if (cancelledRef.current) return;
+
         // Render the first page BEFORE generating locations so the reader
         // can never get stuck on the loading screen.
         await withTimeout(
@@ -202,7 +225,13 @@ export default function Reader({
           // reader is verified working in a real browser. Remove afterwards.
           const detail =
             err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-          setErrorMessage(`Could not open this book for reading. [debug: ${detail}]`);
+          const captured = capturedErrors.length
+            ? ` | console: ${capturedErrors.slice(-3).join(" ;; ")}`
+            : "";
+          const openedInfo = ` | ${openedState}`;
+          setErrorMessage(
+            `Could not open this book for reading. [debug: ${detail}${openedInfo}${captured}]`
+          );
           setStatus("error");
         }
       }
