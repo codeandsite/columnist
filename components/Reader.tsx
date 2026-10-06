@@ -198,7 +198,11 @@ export default function Reader({
         if (!cancelledRef.current) {
           // Log the real cause for debugging; the UI keeps a friendly message.
           console.error("[columnist reader] failed to open book:", err);
-          setErrorMessage("Could not open this book for reading.");
+          // TEMP-DEBUG: surface the underlying error in the UI until the
+          // reader is verified working in a real browser. Remove afterwards.
+          const detail =
+            err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+          setErrorMessage(`Could not open this book for reading. [debug: ${detail}]`);
           setStatus("error");
         }
       }
