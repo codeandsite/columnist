@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+.next/
+out/
+
+# env & secrets — NEVER commit
+.env
+.env.local
+.env*.local
+*.pem
+*.key
+
+# logs / misc
+npm-debug.log*
+.DS_Store

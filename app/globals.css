@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #0b0506;
+  --cream: #f3e9d4;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #0b0506;
+  color: #f3e9d4;
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #8e1b21;
+  color: #f3e9d4;
+}
+
+/* Thin elegant scrollbar */
+::-webkit-scrollbar { width: 10px; height: 8px; }
+::-webkit-scrollbar-track { background: #0b0506; }
+::-webkit-scrollbar-thumb { background: #3a1a1e; border-radius: 8px; border: 2px solid #0b0506; }
+::-webkit-scrollbar-thumb:hover { background: #8e1b21; }
+
+@layer components {
+  .label-eyebrow {
+    @apply font-sans text-[11px] font-medium uppercase text-sand;
+    letter-spacing: 0.32em;
+  }
+  .rule-gold {
+    @apply h-px w-14 bg-gold/60;
+  }
+  .btn-crimson {
+    @apply inline-flex items-center justify-center gap-3 bg-crimson px-8 py-4 font-sans text-sm font-medium uppercase tracking-[0.18em] text-cream transition-all duration-300 hover:bg-ember hover:shadow-lift focus:outline-none focus-visible:ring-2 focus-visible:ring-gold disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-3 border border-cream/25 px-8 py-4 font-sans text-sm font-medium uppercase tracking-[0.18em] text-cream transition-all duration-300 hover:border-gold/70 hover:text-gold focus:outline-none focus-visible:ring-2 focus-visible:ring-gold disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .input-dark {
+    @apply w-full border border-cream/15 bg-coal px-4 py-3 font-sans text-sm text-cream placeholder:text-clay transition-colors focus:border-gold/60 focus:outline-none;
+  }
+  .card-dark {
+    @apply border border-cream/10 bg-coal;
+  }
+  .table-dark th {
+    @apply px-4 py-3 text-left font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-clay;
+  }
+  .table-dark td {
+    @apply border-t border-cream/10 px-4 py-4 font-sans text-sm text-cream;
+  }
+}
+
+/* Reveal-on-scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Respect reduced motion everywhere */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* epub.js rendition theme hooks */
+.reader-theme-light { background: #f7f2e7; }
+.reader-theme-sepia { background: #efe0c3; }
+.reader-theme-dark { background: #14100d; }
