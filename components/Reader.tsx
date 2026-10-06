@@ -185,7 +185,10 @@ export default function Reader({
           if (!cancelledRef.current) setStatus("ready");
         });
         rendition.on("displayed", () => step("event:displayed"));
-        rendition.on("displayError", (e: any) => step(`event:displayError:${e?.message || e}`));
+        // NOTE: epub.js emits "displayerror" (all lowercase).
+        rendition.on("displayerror", (e: any) =>
+          step(`event:displayerror:${e?.message || e}`)
+        );
         rendition.on("rendered", () => step("event:rendered"));
 
         // Parse the package — bail out loudly if it stalls.
@@ -212,6 +215,34 @@ export default function Reader({
         // Render the first page BEFORE generating locations so the reader
         // can never get stuck on the loading screen.
         step("rendition.display:start");
+        // TEMP-DEBUG: probe iframe/view state a few seconds into display.
+        setTimeout(() => {
+          try {
+            const mgr: any = (rendition as any).manager;
+            const views: any[] = mgr?.views?.toArray?.() ?? [];
+            step(`probe:views=${views.length}`);
+            for (const v of views) {
+              const fr: any = v?.iframe;
+              let docInfo = "no-iframe";
+              if (fr) {
+                let hasDoc = false;
+                let bodyLen = -1;
+                try {
+                  hasDoc = !!fr.contentDocument;
+                  bodyLen = fr.contentDocument?.body?.innerHTML?.length ?? -1;
+                } catch (e: any) {
+                  docInfo = `iframe-doc-blocked:${e?.name || e}`;
+                }
+                if (docInfo === "no-iframe") {
+                  docInfo = `iframe:srcdocLen=${String(fr.srcdoc ?? "").length},hasDoc=${hasDoc},bodyLen=${bodyLen},displayed=${v.displayed},rendered=${v.rendered}`;
+                }
+              }
+              step(`probe:${docInfo}`);
+            }
+          } catch (e: any) {
+            step(`probe:FAIL:${e?.message || e}`);
+          }
+        }, 8000);
         await withTimeout(
           rendition.display(savedCfi && savedCfi.length > 0 ? savedCfi : undefined),
           20000,
