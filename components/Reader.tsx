@@ -97,6 +97,16 @@ export default function Reader({
     let rendition: any = null;
     let book: any = null;
 
+    // Never let a single epub.js step hang the reader forever — any stall
+    // rejects so the book still renders (locations/TOC are enhancements).
+    function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+      let timer: ReturnType<typeof setTimeout>;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`reader timeout: ${label}`)), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+    }
+
     async function init() {
       try {
         const res = await fetch(`/api/books/${bookId}/epub-url`);
@@ -147,23 +157,32 @@ export default function Reader({
           if (!cancelledRef.current) setStatus("ready");
         });
 
-        await book.ready;
+        // Parse the package — bail out loudly if it stalls.
+        await withTimeout(book.ready, 20000, "book.ready");
         if (cancelledRef.current) return;
+
+        // Render the first page BEFORE generating locations so the reader
+        // can never get stuck on the loading screen.
+        await withTimeout(
+          rendition.display(savedCfi && savedCfi.length > 0 ? savedCfi : undefined),
+          20000,
+          "rendition.display"
+        );
+        if (!cancelledRef.current) setStatus("ready");
+
+        // Enhancements below must never block reading.
         try {
-          await book.locations.generate(1200);
+          await withTimeout(book.locations.generate(1200), 25000, "locations.generate");
         } catch {
-          /* spine fallback keeps reading working */
+          /* spine fallback keeps progress working */
         }
         try {
-          const nav = await book.loaded.navigation;
+          const nav = await withTimeout(book.loaded.navigation, 15000, "navigation");
           const items = (nav?.toc ?? []) as TocItem[];
           if (!cancelledRef.current) setToc(items.filter((t) => t?.href && t?.label));
         } catch {
           /* no TOC — reader still works */
         }
-
-        await rendition.display(savedCfi && savedCfi.length > 0 ? savedCfi : undefined);
-        if (!cancelledRef.current) setStatus("ready");
       } catch {
         if (!cancelledRef.current) {
           setErrorMessage("Could not open this book for reading.");
