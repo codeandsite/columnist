@@ -116,6 +116,14 @@ export default function Reader({
           document.title = `[dbg] ${s}`;
         } catch { /* ignore */ }
       };
+      // TEMP-DEBUG: capture uncaught errors (the rendition queue runs inside
+      // requestAnimationFrame; a sync throw there never reaches our catch).
+      const onWinErr = (e: ErrorEvent) =>
+        step(`window.onerror:${e.message} @${e.lineno}:${e.colno}`);
+      const onUnhandled = (e: PromiseRejectionEvent) =>
+        step(`unhandledrejection:${(e.reason as any)?.message || String(e.reason)}`);
+      window.addEventListener("error", onWinErr);
+      window.addEventListener("unhandledrejection", onUnhandled);
       try {
         step("fetch-epub-url:start");
         const res = await fetch(`/api/books/${bookId}/epub-url`);
